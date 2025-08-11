@@ -93,13 +93,7 @@ if is_authenticated():
                 st.rerun()
         
         st.divider()
-        
-        # Quick info section
-        with st.expander("ℹ️ Informasi Sistem"):
-            st.info("**Versi:** 1.0.0")
-            st.info("**Status:** 🟢 Online")
-            st.info("**Update:** Hari ini")
-        
+
         # Logout section
         st.divider()
         if st.button("🔓 Logout", type="secondary", use_container_width=True):
@@ -110,8 +104,7 @@ if is_authenticated():
             st.rerun()
 
     # Main content area
-    st.title("🧪 Sistem Manajemen Praktik & Guru")
-    st.caption("Platform terpadu untuk mengelola laboratorium dan sumber daya pendidikan")
+    st.title("🧪 Sistem Manajemen Lab")
     
     # Breadcrumb
     st.markdown(f"**📍 Lokasi:** {st.session_state.current_page}")
@@ -200,7 +193,7 @@ if is_authenticated():
 else:
     # Header untuk halaman login
     st.title("👋 Selamat Datang")
-    st.subheader("Sistem Manajemen Praktik & Guru")
+    st.subheader("Sistem Manajemen Lab")
     st.caption("Silakan login untuk mengakses sistem")
     
     st.divider()

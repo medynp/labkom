@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
+from datetime import date
 from utils.lab_db import get_all_lab
-from utils.barang_db import get_all_barang, insert_barang, delete_barang, create_import_template, export_barang_to_excel
+from utils.barang_db import *
 
 def show_add_barang_section():
     """Menampilkan section untuk tambah barang baru"""
@@ -172,7 +173,6 @@ def show_edit_barang_section():
             )
             st.success("Data barang berhasil diperbarui.")
             st.rerun()
-
 
 def show_barang_list_section():
     """Menampilkan section untuk daftar barang dengan filter"""
@@ -376,6 +376,46 @@ def show_statistics_section():
     else:
         st.info("Belum ada data untuk ditampilkan statistik.")
 
+def show_peminjaman_section():
+    st.markdown("### 📦 Peminjaman Barang")
+
+    barang_tersedia = [
+        b for b in get_all_barang() 
+        if b[4] == "tersedia" and b[2] > 0  # pastikan kondisi dan jumlah
+    ]
+
+    if not barang_tersedia:
+        st.info("Tidak ada barang tersedia untuk dipinjam.")
+        return
+
+    # Buat dictionary dengan label unik
+    barang_dict = {
+        f"{b[1]} | tersedia: {b[2]} | kondisi: {b[3]}": b for b in barang_tersedia
+    }
+
+    with st.form("form_peminjaman"):
+        peminjam = st.text_input("Nama Peminjam")
+        kelas = st.text_input("Kelas")
+        label_barang = st.selectbox("Pilih Barang", list(barang_dict.keys()))
+        barang = barang_dict[label_barang]
+
+        jumlah = st.number_input(
+            "Jumlah Dipinjam", 
+            min_value=1, 
+            max_value=barang[2],  # jumlah tersedia
+            step=1
+        )
+
+        keterangan = st.text_area("Keterangan Penggunaan")
+        tanggal = st.date_input("Tanggal Peminjaman", value=date.today())
+
+        if st.form_submit_button("Pinjam"):
+            insert_peminjaman(
+                peminjam, kelas, barang[0], jumlah, keterangan, tanggal.strftime("%Y-%m-%d")
+            )
+            st.success("Barang berhasil dipinjam.")
+            st.rerun()
+
 def show_barang_management():
     """Fungsi utama untuk manajemen barang"""
     st.subheader("🧰 Manajemen Barang Praktik")
@@ -386,6 +426,9 @@ def show_barang_management():
 
     with st.expander("Edit Barang", expanded=False):
         show_edit_barang_section()
+    
+    with st.expander("📦 Peminjaman Barang", expanded=False):
+        show_peminjaman_section()
 
     # 2. Import Data
     with st.expander("📥 Import Data Barang", expanded=False):

@@ -230,111 +230,159 @@ def show_edit_penggunaan_section():
                     st.error("Kelas harus diisi!")
 
 def show_riwayat_penggunaan_section():
-    """Menampilkan section untuk riwayat penggunaan lab"""
+    """Menampilkan section untuk riwayat penggunaan lab (dengan paginasi & index mulai 1)"""
     st.markdown("### Riwayat Penggunaan Lab")
     
     riwayat = get_riwayat_penggunaan()
-    
-    if riwayat:
-        df = pd.DataFrame(riwayat, columns=[
-            "ID", "Laboratorium", "Guru Pendamping", "Kelas", "Tanggal Mulai",
-            "Tanggal Selesai", "Kondisi Setelah", "Catatan"
-        ])
-        
-        # Format tanggal
-        df["Tanggal Mulai"] = df["Tanggal Mulai"].apply(format_tanggal_indo)
-        df["Tanggal Selesai"] = df["Tanggal Selesai"].apply(format_tanggal_indo)
-        
-        # Export button
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.markdown(f"**Total: {len(df)} penggunaan lab**")
-        with col2:
-            # Convert DataFrame to Excel for export
-            from io import BytesIO
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df.drop(columns=["ID"]).to_excel(writer, sheet_name='Riwayat_Penggunaan_Lab', index=False)
-            output.seek(0)
-            
-            st.download_button(
-                label="📥 Export Excel",
-                data=output.getvalue(),
-                file_name=f"riwayat_penggunaan_lab_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        
-        st.divider()
-        
-        # Filter section
-        st.markdown("**🔍 Filter Data:**")
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            lab_options = ["Semua"] + list(df["Laboratorium"].unique())
-            selected_lab_filter = st.selectbox("Filter Laboratorium", lab_options)
-        
-        with col2:
-            guru_options = ["Semua"] + list(df["Guru Pendamping"].unique())
-            selected_guru_filter = st.selectbox("Filter Guru", guru_options)
-        
-        with col3:
-            kelas_options = ["Semua"] + list(df["Kelas"].unique())
-            selected_kelas_filter = st.selectbox("Filter Kelas", kelas_options)
-        
-        with col4:
-            # Filter berdasarkan status (selesai/belum selesai)
-            status_options = ["Semua", "Sudah Selesai", "Belum Selesai"]
-            selected_status = st.selectbox("Filter Status", status_options)
-        
-        # Apply filters
-        filtered_df = df.copy()
-        
-        if selected_lab_filter != "Semua":
-            filtered_df = filtered_df[filtered_df["Laboratorium"] == selected_lab_filter]
-        
-        if selected_guru_filter != "Semua":
-            filtered_df = filtered_df[filtered_df["Guru Pendamping"] == selected_guru_filter]
-        
-        if selected_kelas_filter != "Semua":
-            filtered_df = filtered_df[filtered_df["Kelas"] == selected_kelas_filter]
-        
-        if selected_status == "Sudah Selesai":
-            filtered_df = filtered_df[filtered_df["Tanggal Selesai"] != ""]
-        elif selected_status == "Belum Selesai":
-            filtered_df = filtered_df[filtered_df["Tanggal Selesai"] == ""]
-        
-        st.divider()
-        
-        # Display filtered results
-        if len(filtered_df) != len(df):
-            st.info(f"Menampilkan {len(filtered_df)} dari {len(df)} penggunaan lab")
-        
-        # Display table without ID column
-        display_df = filtered_df.drop(columns=["ID"])
-        st.dataframe(display_df, use_container_width=True)
-        
-        # Quick stats
-        if len(filtered_df) > 0:
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Total Penggunaan", len(filtered_df))
-            
-            with col2:
-                selesai_count = len(filtered_df[filtered_df["Tanggal Selesai"] != ""])
-                st.metric("Sudah Selesai", selesai_count)
-            
-            with col3:
-                aktif_count = len(filtered_df[filtered_df["Tanggal Selesai"] == ""])
-                st.metric("Masih Aktif", aktif_count)
-            
-            with col4:
-                lab_count = len(filtered_df["Laboratorium"].unique())
-                st.metric("Lab Digunakan", lab_count)
-        
-    else:
+    if not riwayat:
         st.info("Belum ada riwayat penggunaan lab.")
+        return
+
+    # DataFrame awal
+    df = pd.DataFrame(riwayat, columns=[
+        "ID", "Laboratorium", "Guru Pendamping", "Kelas", "Tanggal Mulai",
+        "Tanggal Selesai", "Kondisi Setelah", "Catatan"
+    ])
+
+    # Format tanggal
+    df["Tanggal Mulai"] = df["Tanggal Mulai"].apply(format_tanggal_indo)
+    df["Tanggal Selesai"] = df["Tanggal Selesai"].apply(format_tanggal_indo)
+
+    # Header + Export
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown(f"**Total: {len(df)} penggunaan lab**")
+    with col2:
+        from io import BytesIO
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.drop(columns=["ID"]).to_excel(writer, sheet_name='Riwayat_Penggunaan_Lab', index=False)
+        output.seek(0)
+        st.download_button(
+            label="📥 Export Excel",
+            data=output.getvalue(),
+            file_name=f"riwayat_penggunaan_lab_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    st.divider()
+
+    # 🔍 Filter
+    st.markdown("**🔍 Filter Data:**")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        lab_options = ["Semua"] + sorted(list(df["Laboratorium"].dropna().unique()))
+        selected_lab_filter = st.selectbox("Filter Laboratorium", lab_options)
+    with col2:
+        guru_options = ["Semua"] + sorted(list(df["Guru Pendamping"].dropna().unique()))
+        selected_guru_filter = st.selectbox("Filter Guru", guru_options)
+    with col3:
+        kelas_options = ["Semua"] + sorted(list(df["Kelas"].dropna().unique()))
+        selected_kelas_filter = st.selectbox("Filter Kelas", kelas_options)
+    with col4:
+        status_options = ["Semua", "Sudah Selesai", "Belum Selesai"]
+        selected_status = st.selectbox("Filter Status", status_options)
+
+    # Terapkan filter
+    filtered_df = df.copy()
+    if selected_lab_filter != "Semua":
+        filtered_df = filtered_df[filtered_df["Laboratorium"] == selected_lab_filter]
+    if selected_guru_filter != "Semua":
+        filtered_df = filtered_df[filtered_df["Guru Pendamping"] == selected_guru_filter]
+    if selected_kelas_filter != "Semua":
+        filtered_df = filtered_df[filtered_df["Kelas"] == selected_kelas_filter]
+    if selected_status == "Sudah Selesai":
+        filtered_df = filtered_df[filtered_df["Tanggal Selesai"] != ""]
+    elif selected_status == "Belum Selesai":
+        filtered_df = filtered_df[filtered_df["Tanggal Selesai"] == ""]
+
+    st.divider()
+
+    # Info hasil filter
+    if len(filtered_df) != len(df):
+        st.info(f"Menampilkan {len(filtered_df)} dari {len(df)} penggunaan lab")
+
+    # ====== 🔢 PAGINASI ======
+    import math
+
+    # Reset halaman ketika filter berubah
+    filters_signature = (selected_lab_filter, selected_guru_filter, selected_kelas_filter, selected_status)
+    if "riwayat_filters_sig" not in st.session_state:
+        st.session_state.riwayat_filters_sig = filters_signature
+    if st.session_state.riwayat_filters_sig != filters_signature:
+        st.session_state.riwayat_filters_sig = filters_signature
+        st.session_state.riwayat_page = 1
+
+    # Inisialisasi state page & page size
+    if "riwayat_page" not in st.session_state:
+        st.session_state.riwayat_page = 1
+    if "riwayat_page_size" not in st.session_state:
+        st.session_state.riwayat_page_size = 10
+
+    # Kontrol paginasi
+    col_a, col_b, col_c, col_d = st.columns([1.2, 1.2, 2, 3])
+    with col_a:
+        page_size = st.selectbox("Baris/halaman", [10, 20, 30, 50], index=[10,20,30,50].index(st.session_state.riwayat_page_size))
+        if page_size != st.session_state.riwayat_page_size:
+            st.session_state.riwayat_page_size = page_size
+            st.session_state.riwayat_page = 1
+    total_rows = len(filtered_df)
+    total_pages = max(1, math.ceil(total_rows / st.session_state.riwayat_page_size))
+
+    with col_b:
+        # Input nomor halaman
+        current_page_input = st.number_input(
+            "Halaman",
+            min_value=1,
+            max_value=total_pages,
+            value=st.session_state.riwayat_page,
+            step=1
+        )
+        if current_page_input != st.session_state.riwayat_page:
+            st.session_state.riwayat_page = current_page_input
+            st.rerun()
+
+    with col_c:
+        st.markdown(f"**Total Halaman:** {total_pages}")
+
+    with col_d:
+        prev_col, next_col = st.columns(2)
+        with prev_col:
+            if st.button("◀️ Sebelumnya", disabled=st.session_state.riwayat_page <= 1, use_container_width=True):
+                st.session_state.riwayat_page -= 1
+                st.rerun()
+        with next_col:
+            if st.button("Berikutnya ▶️", disabled=st.session_state.riwayat_page >= total_pages, use_container_width=True):
+                st.session_state.riwayat_page += 1
+                st.rerun()
+
+    # Hitung slice data
+    start = (st.session_state.riwayat_page - 1) * st.session_state.riwayat_page_size
+    end = start + st.session_state.riwayat_page_size
+    page_df = filtered_df.iloc[start:end].drop(columns=["ID"]).copy()
+
+    # Index mulai 1 (berdasarkan posisi global setelah filter)
+    page_df.reset_index(drop=True, inplace=True)
+    page_df.index = range(start + 1, start + 1 + len(page_df))
+    page_df.index.name = "No"
+
+    # Tabel
+    st.dataframe(page_df, use_container_width=True)
+
+    # Quick stats
+    if len(filtered_df) > 0:
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Penggunaan (terfilter)", len(filtered_df))
+        with col2:
+            selesai_count = len(filtered_df[filtered_df["Tanggal Selesai"] != ""])
+            st.metric("Sudah Selesai", selesai_count)
+        with col3:
+            aktif_count = len(filtered_df[filtered_df["Tanggal Selesai"] == ""])
+            st.metric("Masih Aktif", aktif_count)
+        with col4:
+            lab_count = len(filtered_df["Laboratorium"].unique())
+            st.metric("Lab Digunakan", lab_count)
 
 def show_penggunaan_lab():
     """Fungsi utama untuk berita acara penggunaan laboratorium"""

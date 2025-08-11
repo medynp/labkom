@@ -1,6 +1,7 @@
 import sqlite3
 import pandas as pd
 import streamlit as st
+from datetime import datetime
 from .db import *
 def get_conn():
     return sqlite3.connect("labkom.db", check_same_thread=False)
@@ -12,6 +13,7 @@ def migrate_barang():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nama_barang TEXT NOT NULL,
             jumlah INTEGER NOT NULL,
+            jumlah_tersedia INTEGER NOT NULL,
             kondisi TEXT NOT NULL,
             status TEXT DEFAULT 'tersedia',
             kategori TEXT,
@@ -28,8 +30,8 @@ def migrate_barang():
 def insert_barang(nama, jumlah, kondisi, status, kategori, lab_id):
     conn = get_conn()
     conn.execute(
-        "INSERT INTO barang (nama_barang, jumlah, kondisi, status, kategori, lab_id) VALUES (?, ?, ?, ?, ?, ?)",
-        (nama, jumlah, kondisi, status, kategori, lab_id)
+        "INSERT INTO barang (nama, jumlah, jumlah_tersedia, kondisi, status, kategori, lab_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (nama, jumlah, jumlah, kondisi, status, kategori, lab_id)  # jumlah_tersedia = jumlah
     )
     conn.commit()
 
@@ -57,7 +59,7 @@ def update_kondisi_barang(barang_id, kondisi):
     conn.commit()
 
 def update_barang(id_barang, nama, jumlah, kondisi, status, kategori, lab_id):
-    conn = create_connection()
+    conn = get_conn()
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE barang 
@@ -171,5 +173,85 @@ def export_barang_to_excel(data=None, filtered_data=None):
     
     output.seek(0)
     return output.getvalue()
+
+def insert_peminjaman(nama_peminjam, kelas, id_barang, jumlah_pinjam, keperluan, tanggal_pinjam):
+    conn = get_conn()
+    cursor = conn.cursor()
+
+    # Simpan ke tabel peminjaman
+    cursor.execute("""
+        INSERT INTO peminjaman_barang (
+            nama_peminjam, kelas_peminjam, id_barang, jumlah_pinjam, keperluan, tanggal_pinjam
+        ) VALUES (?, ?, ?, ?, ?, ?)
+    """, (nama_peminjam, kelas, id_barang, jumlah_pinjam, keperluan, tanggal_pinjam))
+
+    # Update jumlah tersedia di tabel barang
+    cursor.execute("SELECT jumlah_tersedia, jumlah FROM barang WHERE id = ?", (id_barang,))
+    row = cursor.fetchone()
+    if row:
+        jumlah_tersisa = row["jumlah_tersedia"] - jumlah_pinjam
+        status = "digunakan" if jumlah_tersisa == 0 else "tersedia"
+        cursor.execute("UPDATE barang SET jumlah_tersedia = ?, status = ? WHERE id = ?", (jumlah_tersisa, status, id_barang))
+
+    conn.commit()
+    conn.close()
+
+def kembalikan_barang(id_peminjaman, catatan_setelah, tanggal_kembali):
+    conn = get_conn()
+    cursor = conn.cursor()
+
+    # Ambil data peminjaman
+    cursor.execute("SELECT id_barang, jumlah_pinjam FROM peminjaman_barang WHERE id = ?", (id_peminjaman,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return False
+
+    id_barang = row["id_barang"]
+    jumlah_kembali = row["jumlah_pinjam"]
+
+    # Update jumlah tersedia
+    cursor.execute("SELECT jumlah_tersedia, jumlah FROM barang WHERE id = ?", (id_barang,))
+    barang = cursor.fetchone()
+    if barang:
+        tersedia = barang["jumlah_tersedia"] + jumlah_kembali
+        status = "tersedia" if tersedia == barang["jumlah"] else "digunakan"
+        cursor.execute("UPDATE barang SET jumlah_tersedia = ?, status = ? WHERE id = ?", (tersedia, status, id_barang))
+
+    # Update catatan pengembalian
+    cursor.execute("""
+        UPDATE peminjaman_barang
+        SET tanggal_kembali = ?, catatan_setelah = ?
+        WHERE id = ?
+    """, (tanggal_kembali, catatan_setelah, id_peminjaman))
+
+    conn.commit()
+    conn.close()
+    return True
+
+def get_peminjaman_aktif():
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT pb.id, pb.nama_peminjam, pb.kelas_peminjam, b.nama_barang AS nama_barang,
+               pb.jumlah_pinjam, pb.tanggal_pinjam, pb.keperluan
+        FROM peminjaman_barang pb
+        JOIN barang b ON pb.id_barang = b.id
+        WHERE pb.tanggal_kembali IS NULL
+    """)
+    return cursor.fetchall()
+
+def get_riwayat_peminjaman():
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT pb.nama_peminjam, pb.kelas_peminjam, b.nama_barang AS nama_barang,
+               pb.jumlah_pinjam, pb.tanggal_pinjam, pb.tanggal_kembali, pb.keperluan, pb.catatan_setelah
+        FROM peminjaman_barang pb
+        JOIN barang b ON pb.id_barang = b.id
+        WHERE pb.tanggal_kembali IS NOT NULL
+        ORDER BY pb.tanggal_kembali DESC
+    """)
+    return cursor.fetchall()
 
 migrate_barang()
